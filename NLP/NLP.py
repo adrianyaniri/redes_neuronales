@@ -101,6 +101,8 @@ class NLP:
         self.errors = [error]
         self.activations = [x]
 
+        # Inicializa delta_activations con la forma adecuada para la primera capa
+        delta_activations = np.zeros((self.num_layers_total - 1, self.num_neurons_layers[0]))
         # Calculas los deltas de las activaciones para cada neurona
         delta_activations = sigmoid_derivada(y_pred) * error
 
@@ -109,23 +111,19 @@ class NLP:
 
         print("Longitud de self.activations antes del bucle:", len(self.activations))
         for i in reversed(range(self.num_layers_total - 1)):
-            print("Iteración:", i)
-            print("Valor de i - 1:", i - 1)
-            print("Longitud de self.activations en la iteración:", len(self.activations))
-            print("Valores de self.activations:", self.activations)
             # Actualización de delta_activations para la siguiente iteración:
             if i > 0:  # No actualizar en la última capa
-                delta_activations = np.matmul(self.weights[i].T, delta_activations[i]) * sigmoid_derivada(
-                    self.activations[i - 1])
-
-            delta_weights = np.matmul(delta_activations[i - 1].T, self.activations[i - 1])
-            print("Forma de delta_activations[i]:", delta_activations[i].shape)
-            print("Forma de self.activations[i - 1]:", self.activations[i - 1].shape)
-            print("Forma de delta_weigths:", delta_weights.shape)
-
+                print("Dimensiones de delta_activations[i-1]: ", delta_activations[i - 1].shape)
+                delta_activations = np.matmul(self.weights[i].T,
+                                              delta_activations[i - 1]) * sigmoid_derivada(self.activations[i - 1])
+            print("Dimensiones de self.weights[i].T: ", self.weights[i].T.shape)
+            delta_weights = np.matmul(self.weights[i].T,
+                                      delta_activations[i - 1]) * sigmoid_derivada(self.activations[i - 1])
             delta_biases = np.sum(delta_activations[i], axis=0)
-            self.weights[i - 1] = (self.weights[i - 1] - self.learning_rate * delta_weights
-                                   - self.learning_rate * regularization)
+
+            self.weights[i - 1] = (self.weights[i - 1] - (self.learning_rate * delta_weights)
+                                   - (self.learning_rate * regularization))
+
             self.biases[i - 1] = self.biases[i - 1] - self.learning_rate * delta_biases
             self.activations.append(self.activations[i])
 
