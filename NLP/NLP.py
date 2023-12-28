@@ -1,83 +1,170 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.utils import shuffle
 
 from functionActivacion import sigmoid, sigmoid_derivada
 from loss_function import mean_squared_error_loss
 from generar_datos import generate_nonlinear_dataset
+from utils.regularization import calculate_regularization
+
 
 class NLP:
-    
-    def __init__(self, num_layers, num_neur_layers, function, loss_function):
-        self.num_layers = num_layers
-        self.num_neur_layers = num_neur_layers
-        self.function = function
-        self.loss_function = loss_function
-        
-        self.activations = []
-        self.errors = []
-        self.learning_rate = 0.01
-        
-        # Inicializacion de los pesos
-        self.weights = [np.random.rand(num_neur_layers[i], num_neur_layers[i + 1]) for i in range(num_layers - 1)]
-            
-        # Inicializar los bias de la red
-        self.biases = [np.random.rand(num_neur_layers[i + 1]) for i in range(num_layers - 1)]
 
+    def __init__(self, num_layers_total, num_neurons_layers, activation_function, errors_function):
+        """
+        Inicializacion de los atributos de la clase NLP
+
+        :param num_layers_total: Numeros de capas de la red
+        :param num_neurons_layers: Numberos de neuronas de la capa
+        :param activation_function: Function de activacion
+        :param errors_function: Funcion de error de la capa
+        """
+
+        self.num_layers_total = num_layers_total
+        self.num_neurons_layers = num_neurons_layers
+        self.activation_function = activation_function
+        self.errors_function = errors_function
+
+        self.errors = []
+
+        self.activations = []
+        self.learning_rate = 0.01
+
+        # Inicializar de los pesos y bias
+        self.weights = []
+        self.biases = []
+
+        for i in range(num_layers_total - 1):
+            weights = np.random.randn(num_neurons_layers[i], num_neurons_layers[i + 1]) * 0.01
+            biases = np.random.randn(num_neurons_layers[i + 1]) * 0.01
+            self.weights.append(weights)
+            self.biases.append(biases)
+
+        # Regularizacion L2
+        self.regularization_coefficient = 0.0001
 
     def forward(self, x):
-        self.activations = [x]
-        for i in range (self.num_layers - 1):
-            z = np.dot(self.activations[-1], self.weights[i]) + self.biases[i]
-            act = self.function(z)
-            self.activations.append(act)
-        return self.activations[-1]       # Activacion de la ultima capa
-        
-    
+        """
+        Realiza la propagacion hace adelante de la red
+        :param x: Entrada de la red
+        :return: Activacion de la ultima capa
+        matmul -> calcula la suma ponderada
+        """
+        # capa entrada
+        activations = x
+        for i in range(self.num_layers_total - 1):
+            # Capas oculta
+            weights = self.weights[i]
+            biases = self.biases[i]
+            activations = self.activation_function(np.matmul(activations, weights) + biases)
+            self.activations.append(activations)
+
+        return activations
+
     def activation(self, x):
-        # Aplica la funcion de activacion
-        return self.function(x)
-    
-    def loss(self,prediction, actual):
-        return self.loss_function(prediction, actual)
-        
-    
+        """
+        Aplica la funcion de activaciones
+        :param x: Valor al aplicar la funcion de activacion
+        :return: Resultado de aplicar la activacion
+        """
+
+        return self.activation_function(x)
+
+    def loss(self, prediction, actual):
+        """
+        Calcula la funcion de perdida
+        :param prediction: Prediccion de la red
+        :param actual: Valor real
+        :return: Valor de la funcion de perdida
+        """
+        return self.errors_function(prediction, actual)
+
     def backpropagation(self, x, y_true):
-        # Calcula la salida 
+        """
+        Realiza la propagacion hacia atras
+        :param x:
+        :param y_true:
+        :return:
+        """
+        # Calcula la salida
         y_pred = self.forward(x)
-    
+
         # Calcula el error
-        error = self.loss(y_pred, y_true)
+        error = self.errors_function(y_pred, y_true)
 
         # Inicializa self.errors antes de calcular las derivadas
         self.errors = [error]
+        self.activations = [x]
 
-        # Calcular las derivadas
-        # Revisar la g(h)
-        d_error_activations = [sigmoid_derivada(a) * error for a in self.activations]
-        d_error_weights = [np.dot(self.activations[i].T, d_error_activations[i + 1]) for i in range(self.num_layers - 1)]
-        d_error_biases = [np.sum(d_error_activations[i + 1], axis=0) for i in range(self.num_layers - 1)]
+        # Calculas los deltas de las activaciones para cada neurona
+        delta_activations = sigmoid_derivada(y_pred) * error
 
-        # Actualizar los pesos y bias
-        self.weights = [w - self.learning_rate * dw for w, dw in zip(self.weights, d_error_weights)]
-        self.biases = [b - self.learning_rate * db for b, db in zip(self.biases, d_error_biases)]
-    
-        return error
-    
-    def train(self, X_train, y_train, epochs, learning_rate):
-        self.learning_rate = learning_rate
+        # Calcula la regularizacion
+        regularization = calculate_regularization(self.weights)
 
+        print("Longitud de self.activations antes del bucle:", len(self.activations))
+        for i in reversed(range(self.num_layers_total - 1)):
+            print("Iteración:", i)
+            print("Valor de i - 1:", i - 1)
+            print("Longitud de self.activations en la iteración:", len(self.activations))
+            print("Valores de self.activations:", self.activations)
+            # Actualización de delta_activations para la siguiente iteración:
+            if i > 0:  # No actualizar en la última capa
+                delta_activations = np.matmul(self.weights[i].T, delta_activations[i]) * sigmoid_derivada(
+                    self.activations[i - 1])
+
+            delta_weights = np.matmul(delta_activations[i - 1].T, self.activations[i - 1])
+            print("Forma de delta_activations[i]:", delta_activations[i].shape)
+            print("Forma de self.activations[i - 1]:", self.activations[i - 1].shape)
+            print("Forma de delta_weigths:", delta_weights.shape)
+
+            delta_biases = np.sum(delta_activations[i], axis=0)
+            self.weights[i - 1] = (self.weights[i - 1] - self.learning_rate * delta_weights
+                                   - self.learning_rate * regularization)
+            self.biases[i - 1] = self.biases[i - 1] - self.learning_rate * delta_biases
+            self.activations.append(self.activations[i])
+
+        return {'weights': self.weights, 'biases': self.biases}
+
+    def train(self, X_train, y_train, epochs, batch_size):
+        """
+        Funcion de entranamiento para la red
+        :param batch_size:
+        :param X_train: Conjunto de entrenamiento
+        :param y_train: Etiquetas del conjunto de entrenamiento
+        :param epochs: Numero de epocas de entrenamiento
+        """
         for epoch in range(epochs):
-            total_loss = 0
-            for x, y in zip(X_train, y_train):
-                # Asegúrate de llamar a forward antes de backpropagation
-                self.forward(x)
-                error = self.backpropagation(x, y)
-                total_loss += error
+            X_train, y_train = shuffle(X_train, y_train)  # Para asegurar de que el conjunto no este ordenado
+            for i in range(0, len(X_train), batch_size):
+                x_batch = X_train[i:i + batch_size]
+                y_batch = y_train[i:i + batch_size]
+                self.backpropagation(x_batch, y_batch)
 
-            loss = total_loss / len(X_train)
-            print(f'Epoch {epoch + 1}/{epochs}, Loss: {loss}')
+    def predict(self, x):
+        return self.forward(x)
+
+    def evaluate(self, X_test, y_test, loss_function=None):
+        """
+        Calcula el error de validacion
+        :param loss_function:
+        :param X_test: Conjunto de prueba
+        :param y_test: Etiquetas del conjunto de prueba
+        :return: Error de validacion
+        """
+        if loss_function is None:
+            loss_function = self.loss()
+        # Realiza la propagacion hacia adelante
+        outputs = self.forward(X_test)
+
+        # Calcula el error
+        error = self.loss(X_test, y_test)
+        return error
 
 
 # Inicializacion de las capas y neuronas
@@ -85,59 +172,74 @@ input_size = 3
 hidden_size = 5
 output_size = 1
 
-# Instancia del NLP
-nlp_instance = NLP(num_layers=3, num_neur_layers=[input_size, hidden_size, output_size], function=sigmoid, loss_function=mean_squared_error_loss)
+epochs = 50
+learning_rate = 0.01
+batch_size = 32
 
 # Generar conjunto de datos
 X_train, y_train = generate_nonlinear_dataset()
 
+# Separacion de los conjunto de train y test
 X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
 
+# Normalizacion de los datos
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# Instancia del NLP
+nlp = NLP(
+    num_layers_total=3,
+    num_neurons_layers=[input_size, hidden_size, output_size],
+    activation_function=sigmoid,
+    errors_function=mean_squared_error_loss
+)
 
 # Entrenamiento de la red
-epochs = 5000
-learning_rate = 0.1
-for epoch in range(epochs):
-    total_loss = 0
-    for x, y in zip(X_train, y_train):
-        x = np.expand_dims(x, axis=0)  # Asegurar que x tenga forma (1, 2)
-        y = np.array([y])  # Asegurar que y tenga forma (1,)
-
-        # Asegúrate de llamar a forward antes de backpropagation
-        nlp_instance.forward(x)
-        error = nlp_instance.backpropagation(x, y)
-        total_loss += error
-
-    average_loss = total_loss / len(X_train)
-    print(f'Epoch {epoch + 1}/{epochs}, Loss: {average_loss}')
+nlp.train(X_train, y_train, epochs, batch_size)
 
 # Realizar predicciones en el conjunto de datos de entrenamiento
-predictions = np.array([nlp_instance.forward(np.expand_dims(x, axis=0))[0] for x in X_train])
+predictions = np.array([nlp.forward(np.expand_dims(x, axis=0))[0] for x in X_train])
 
+# Visualizacion
 
-class_0_indices = np.where(predictions < 0.5)[0]
-class_1_indices = np.where(predictions >= 0.5)[0]
+pca = PCA(n_components=2)
+X_train_reduced = pca.fit_transform(X_train)
+X_test_reduced = pca.transform(X_test)
 
-# Visualizar las predicciones y el conjunto de datos
-plt.scatter(X_train[class_0_indices, 0], X_train[class_0_indices, 1], label='Clase 0 (Predicción)', marker='o', alpha=0.5)
-plt.scatter(X_train[class_1_indices, 0], X_train[class_1_indices, 1], label='Clase 1 (Predicción)', marker='x', alpha=0.5)
-plt.scatter(X_train[y_train == 0, 0], X_train[y_train == 0, 1], label='Clase 0 (Real)', marker='o')
-plt.scatter(X_train[y_train == 1, 0], X_train[y_train == 1, 1], label='Clase 1 (Real)', marker='x')
-
+plt.scatter(X_train_reduced[y_train == 0, 0], X_train_reduced[y_train == 0, 1], label='Clase 0 (Real)', marker='o',
+            alpha=0.5)
+plt.scatter(X_train_reduced[y_train == 1, 0], X_train_reduced[y_train == 1, 1], label='Clase 1 (Real)', marker='x',
+            alpha=0.5)
+plt.scatter(X_train_reduced[predictions < 0.5, 0], X_train_reduced[predictions < 0.5, 1], label='Clase 0 (Predicción)',
+            marker='o', alpha=0.5)
+plt.scatter(X_train_reduced[predictions >= 0.5, 0], X_train_reduced[predictions >= 0.5, 1],
+            label='Clase 1 (Predicción)', marker='x', alpha=0.5)
 plt.xlabel('Característica 1')
 plt.ylabel('Característica 2')
 plt.legend()
 plt.show()
 
-print('Predicciones en el conjunto de prueba:')
-print(predictions)
+# Evaluación del modelo
 
+# Predicciones en el conjunto de prueba
+predictions_test = np.array([nlp.forward(np.expand_dims(x, axis=0))[0] for x in X_test])
 
-# Prediciones
-predictions_test = np.array([nlp_instance.forward(np.expand_dims(x, axis=0))[0] for x in X_test])
 # Convertir las predicciones a etiquetas binarias (0 o 1) usando un umbral
 binary_predictions = (predictions_test >= 0.5).astype(int)
 
 # Calcular la precisión del modelo en el conjunto de prueba
 accuracy = accuracy_score(y_test, binary_predictions)
 print(f'Precisión en el conjunto de prueba: {accuracy * 100:.2f}%')
+
+# Otros métricas de evaluación
+
+precision = precision_score(y_test, binary_predictions)
+recall = recall_score(y_test, binary_predictions)
+f1 = f1_score(y_test, binary_predictions)
+auc = roc_auc_score(y_test, predictions)
+
+print(f'Precisión: {precision}')
+print(f'Sensibilidad: {recall}')
+print(f'F1-score: {f1}')
+print(f'AUC: {auc}')

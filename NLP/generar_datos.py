@@ -3,7 +3,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def generate_nonlinear_dataset(num_samples=100):
+
+def generate_nonlinear_dataset(num_samples=5):
     np.random.seed(42)
 
     # Genera puntos aleatorios en el rango [-1, 1] para las dos características
@@ -11,9 +12,10 @@ def generate_nonlinear_dataset(num_samples=100):
 
     # Etiqueta de clase 1 para puntos en el cuadrante superior derecho y cuadrante inferior izquierdo
     y = np.logical_xor(X[:, 0] > 0, X[:, 1] > 0).astype(int)
-    X[:,2] = 1
+    X[:, 2] = 1
 
     return X, y
+
 
 # Visualización del conjunto de datos
 X, y = generate_nonlinear_dataset()
